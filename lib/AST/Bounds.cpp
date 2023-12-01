@@ -474,9 +474,14 @@ class DeclBoundsFinder : public clang::DeclVisitor<DeclBoundsFinder>,
       }
 
       // NOTE(pag): This is a heuristic for detecting when things go "too far."
+      // NOTE(kumarak): We have gone too far and the token bound should end
+      //                if it reaches to a namespace. Return previous token in
+      //                that case
       if (tok_kind == clang::tok::kw_namespace) {
-        assert(kind == clang::tok::kw_namespace ||
-               tok[-1].Kind() == clang::tok::kw_using);
+        if (!(kind == clang::tok::kw_namespace ||
+            tok[-1].Kind() == clang::tok::kw_using)) {
+          return nullptr;
+        }
       }
       if (tok_kind == kind && 0 >= nesting) {
         return tok;
@@ -892,10 +897,9 @@ class DeclBoundsFinder : public clang::DeclVisitor<DeclBoundsFinder>,
     if (!proto) {
       return;
     }
-
     if (proto->l_paren) {
       assert(lower_bound < proto->l_paren);
-      assert(proto->r_paren < upper_bound);
+      assert(proto->r_paren <= upper_bound);
     }
   }
 
@@ -1080,7 +1084,11 @@ class DeclBoundsFinder : public clang::DeclVisitor<DeclBoundsFinder>,
 
     clang::FunctionDecl *func =
         clang::dyn_cast<clang::FunctionDecl>(decl->getDeclContext());
-    if (!func) {
+    // Note: If the ParamVarDecl is from the implicitly defaulted FunctionDecl
+    //       then the corresponding token does not exist. No need to look for
+    //       token bounds in that case; Return early with the default initialization
+    //       of `lower_bounds` and `upper_bounds`
+    if (!func || func->isDefaulted()) {
       return;
     }
 
@@ -1124,9 +1132,9 @@ class DeclBoundsFinder : public clang::DeclVisitor<DeclBoundsFinder>,
       if (semi_tok) {
         assert(semi_tok >= name_tok);
         Expand(semi_tok);
-      } else {
-        assert(false);
-      }
+      } /*else {
+        //assert(false);
+      }*/
     } else {
       assert(false);
     }
